@@ -185,7 +185,7 @@ app.post('/api/interviews', authenticate, allow('student'), async (req: AuthedRe
     const resumeText = String(req.body.resumeText ?? '').slice(0, 12000);
     const jobDescription = String(req.body.jobDescription ?? '').slice(0, 8000);
     const type = req.body.type === 'hr' ? 'hr' : 'technical';
-    const created = await pool.query('insert into interviews (student_id, type, role_title) values ($1, $2, $3) returning id', [studentId, type, roleTitle]);
+    const created = await pool.query('insert into interviews (student_id, type, role_title, resume_context, job_description) values ($1, $2, $3, $4, $5) returning id', [studentId, type, roleTitle, resumeText, jobDescription]);
     const interviewId = created.rows[0].id as string;
     const question = await aiChat([
       { role: 'system', content: 'You are VYONA AI, a warm but rigorous campus placement interviewer. Ask exactly one clear spoken interview question. Do not give the answer. Keep it under 45 words.' },
@@ -197,14 +197,14 @@ app.post('/api/interviews', authenticate, allow('student'), async (req: AuthedRe
 app.post('/api/interviews/:id/turn', authenticate, allow('student'), async (req: AuthedRequest, res) => {
   try {
     const studentId = await studentProfileId(req.user!.id);
-    const owned = await pool.query("select id, role_title, type from interviews where id = $1 and student_id = $2 and status = 'in_progress'", [req.params.id, studentId]);
+    const owned = await pool.query("select id, role_title, type, resume_context, job_description from interviews where id = $1 and student_id = $2 and status = 'in_progress'", [req.params.id, studentId]);
     if (!owned.rows[0]) return res.status(404).json({ error: 'Active interview not found.' });
     const question = String(req.body.question ?? '').trim(); const answer = String(req.body.answer ?? '').trim();
     if (!question || !answer) return res.status(400).json({ error: 'Question and answer are required.' });
     const seq = await pool.query('select coalesce(max(sequence), 0)::int + 1 as next from interview_answers where interview_id = $1', [req.params.id]);
     await pool.query('insert into interview_answers (interview_id, question, answer, sequence) values ($1, $2, $3, $4)', [req.params.id, question, answer, seq.rows[0].next]);
     const history = await pool.query('select question, answer from interview_answers where interview_id = $1 order by sequence', [req.params.id]);
-    const messages = [{ role: 'system', content: `You are VYONA AI conducting a ${owned.rows[0].type} interview for ${owned.rows[0].role_title}. Ask one follow-up or next question based on the candidate's answers. Do not reveal scores or ideal answers. Be professional, supportive, and concise. If enough coverage after 6-8 questions, ask one final closing question.` }, ...history.rows.flatMap((r: { question: string; answer: string }) => [{ role: 'assistant', content: r.question }, { role: 'user', content: r.answer }])];
+    const messages = [{ role: 'system', content: `You are VYONA AI conducting a ${owned.rows[0].type} interview for ${owned.rows[0].role_title}. Candidate resume context: ${owned.rows[0].resume_context || 'Not supplied'}. Job description: ${owned.rows[0].job_description || 'Not supplied'}. Ask one follow-up or next question based on the candidate's answers and these details. Do not reveal scores or ideal answers. Be professional, supportive, and concise. If enough coverage after 6-8 questions, ask one final closing question.` }, ...history.rows.flatMap((r: { question: string; answer: string }) => [{ role: 'assistant', content: r.question }, { role: 'user', content: r.answer }])];
     const nextQuestion = await aiChat(messages, 0.65);
     res.json({ nextQuestion, answered: history.rowCount });
   } catch (error) { res.status(500).json({ error: error instanceof Error ? error.message : 'Could not process interview response.' }); }
