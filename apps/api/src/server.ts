@@ -243,7 +243,7 @@ app.post('/api/voice/transcribe', authenticate, allow('student'), express.raw({ 
     if (!Buffer.isBuffer(req.body) || req.body.length < 100) return res.status(400).json({ error: 'Audio recording is empty.' });
     const form = new FormData();
     form.append('model', process.env.AI_STT_MODEL ?? 'whisper-1');
-    form.append('file', new Blob([req.body], { type: req.header('content-type') ?? 'audio/webm' }), 'answer.webm');
+    form.append('file', new Blob([new Uint8Array(req.body).buffer as ArrayBuffer], { type: req.header('content-type') ?? 'audio/webm' }), 'answer.webm');
     const base = (process.env.AI_BASE_URL ?? 'https://api.openai.com/v1').replace(/\/$/, '');
     const response = await fetch(`${base}/audio/transcriptions`, { method: 'POST', headers: { Authorization: `Bearer ${process.env.AI_API_KEY}` }, body: form });
     const data = await response.json() as { text?: string; error?: { message?: string } };
