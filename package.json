@@ -1,0 +1,19 @@
+{
+  "name": "vyona-ai-mvp",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "dev": "concurrently \"npm run dev --workspace @vyona/api\" \"npm run dev --workspace @vyona/web\"",
+    "build": "npm run build --workspace @vyona/shared && npm run build --workspace @vyona/api && npm run build --workspace @vyona/web",
+    "typecheck": "npm run typecheck --workspace @vyona/shared && npm run typecheck --workspace @vyona/api && npm run typecheck --workspace @vyona/web",
+    "db:generate": "npm run db:generate --workspace @vyona/api",
+    "db:migrate": "npm run db:migrate --workspace @vyona/api",
+    "db:seed": "npm run db:seed --workspace @vyona/api"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "typescript": "^5.7.3"
+  },
+  "engines": { "node": ">=20" }
+}
