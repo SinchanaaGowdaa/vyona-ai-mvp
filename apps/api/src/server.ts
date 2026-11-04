@@ -260,7 +260,7 @@ app.post('/api/voice/speech', authenticate, allow('student'), async (req, res) =
     const response = await fetch(`${base}/audio/speech`, { method: 'POST', headers: { Authorization: `Bearer ${process.env.AI_API_KEY}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ model: process.env.AI_TTS_MODEL ?? 'tts-1', voice: process.env.AI_TTS_VOICE ?? 'nova', input: text, response_format: 'mp3' }) });
     if (!response.ok) { const detail = await response.text(); return res.status(502).json({ error: detail.slice(0, 500) || 'AI speech generation failed.' }); }
     res.setHeader('Content-Type', 'audio/mpeg'); res.setHeader('Cache-Control', 'no-store');
-    response.body?.pipeTo(WritableStream ? new WritableStream({ write(chunk) { res.write(Buffer.from(chunk)); }, close() { res.end(); } }) : undefined as never).catch(() => res.end());
+    const audio = Buffer.from(await response.arrayBuffer());\n    res.end(audio);
   } catch (error) { res.status(500).json({ error: error instanceof Error ? error.message : 'Speech generation failed.' }); }
 });
 
