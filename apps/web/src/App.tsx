@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 
 type User = { id: string; fullName: string; email: string; role: 'superadmin' | 'college_admin' | 'student'; organizationId?: string | null };
 type Report = { overallScore: number; summary: string; strengths: string[]; improvements: string[]; rubric: Record<string, number> };
@@ -16,7 +16,7 @@ export default function App() {
   const [students, setStudents] = useState<any[]>([]); const [colleges, setColleges] = useState<any[]>([]);
   const [interview, setInterview] = useState<Interview | null>(null); const [roleTitle, setRoleTitle] = useState('Software Developer'); const [interviewType, setInterviewType] = useState<'technical' | 'hr'>('technical');
   const [resumeText, setResumeText] = useState(''); const [jobDescription, setJobDescription] = useState('');
-  const [answer, setAnswer] = useState(''); const [recording, setRecording] = useState(false); const [report, setReport] = useState<Report | null>(null);
+  const [answer, setAnswer] = useState(''); const [recording, setRecording] = useState(false); const [report, setReport] = useState<Report | null>(null); const [completedInterviewId, setCompletedInterviewId] = useState('');
   const [dashboard, setDashboard] = useState<any>(null); const recorder = useRef<MediaRecorder | null>(null); const chunks = useRef<Blob[]>([]);
 
   async function request(path: string, options: RequestInit = {}) {
@@ -41,7 +41,7 @@ export default function App() {
     if (user.role === 'superadmin') request('/api/colleges').then(d => setColleges(d.colleges)).catch(e => setError(e.message));
     if (user.role === 'student') request('/api/student/dashboard').then(d => setDashboard(d.dashboard)).catch(e => setError(e.message));
   }, [user]);
-  async function signIn(event: React.FormEvent) {
+  async function signIn(event: FormEvent) {
     event.preventDefault(); setBusy(true); setError('');
     try {
       const data = await request(authMode === 'login' ? '/api/auth/login' : '/api/auth/bootstrap-superadmin', { method: 'POST', body: JSON.stringify({ email, password, fullName }) });
@@ -49,12 +49,12 @@ export default function App() {
     } catch (e) { setError(e instanceof Error ? e.message : 'Could not sign in.'); } finally { setBusy(false); }
   }
   function signOut() { localStorage.removeItem('vyona_token'); setToken(''); setUser(null); setInterview(null); setReport(null); }
-  async function createCollege(event: React.FormEvent) {
+  async function createCollege(event: FormEvent) {
     event.preventDefault(); setBusy(true); setError('');
     try { await request('/api/colleges', { method: 'POST', body: JSON.stringify({ name: collegeName, adminName, adminEmail }) }); setCollegeName(''); setAdminName(''); setAdminEmail(''); setColleges((await request('/api/colleges')).colleges); }
     catch (e) { setError(e instanceof Error ? e.message : 'Could not create college.'); } finally { setBusy(false); }
   }
-  async function createStudent(event: React.FormEvent) {
+  async function createStudent(event: FormEvent) {
     event.preventDefault(); setBusy(true); setError('');
     try { const result = await request('/api/students', { method: 'POST', body: JSON.stringify({ fullName: studentName, email: studentEmail, rollNumber, department }) }); window.alert(`Student created. Temporary password: ${result.temporaryPassword}`); setStudentName(''); setStudentEmail(''); setRollNumber(''); setDepartment(''); setStudents((await request('/api/students')).students); }
     catch (e) { setError(e instanceof Error ? e.message : 'Could not create student.'); } finally { setBusy(false); }
@@ -66,8 +66,8 @@ export default function App() {
       audio.onended = () => URL.revokeObjectURL(url); await audio.play();
     } catch { if ('speechSynthesis' in window) { window.speechSynthesis.cancel(); window.speechSynthesis.speak(new SpeechSynthesisUtterance(text)); } }
   }
-  async function startInterview(event: React.FormEvent) {
-    event.preventDefault(); setBusy(true); setError(''); setReport(null);
+  async function startInterview(event: FormEvent) {
+    event.preventDefault(); setBusy(true); setError(''); setReport(null); setCompletedInterviewId('');
     try { const data = await request('/api/interviews', { method: 'POST', body: JSON.stringify({ type: interviewType, roleTitle, resumeText, jobDescription }) }); setInterview(data); setAnswer(''); setTab('live-interview'); void speak(data.question); }
     catch (e) { setError(e instanceof Error ? e.message : 'Could not start interview.'); } finally { setBusy(false); }
   }
@@ -97,12 +97,13 @@ export default function App() {
   }
   async function finishInterview() {
     if (!interview) return; setBusy(true); setError('');
-    try { const data = await request(`/api/interviews/${interview.interviewId}/finish`, { method: 'POST', body: JSON.stringify({}) }); setReport(data.report); setInterview(null); setTab('reports'); }
+    try { const data = await request(`/api/interviews/${interview.interviewId}/finish`, { method: 'POST', body: JSON.stringify({}) }); setReport(data.report); setCompletedInterviewId(interview.interviewId); setInterview(null); setTab('reports'); }
     catch (e) { setError(e instanceof Error ? e.message : 'Could not evaluate interview.'); } finally { setBusy(false); }
   }
   async function downloadTranscript() {
-    if (!interview) return;
-    try { const data = await request(`/api/interviews/${interview.interviewId}/transcript`); const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'vyona-interview-transcript.json'; a.click(); URL.revokeObjectURL(url); }
+    const transcriptId = interview?.interviewId ?? completedInterviewId;
+    if (!transcriptId) return;
+    try { const data = await request(`/api/interviews/${transcriptId}/transcript`); const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'vyona-interview-transcript.json'; a.click(); URL.revokeObjectURL(url); }
     catch (e) { setError(e instanceof Error ? e.message : 'Could not download transcript.'); }
   }
 
@@ -116,7 +117,7 @@ export default function App() {
         {user.role === 'student' ? <><div className="section-heading"><div><span className="eyebrow">YOUR JOURNEY</span><h2>Assessment progress</h2></div></div><section className="stats"><article className="stat"><span>Interviews completed</span><strong>{dashboard?.completed ?? 0}</strong><small>Evaluated interviews</small></article><article className="stat"><span>Average score</span><strong>{dashboard?.average_score ?? '—'}{dashboard?.average_score != null ? '%' : ''}</strong><small>Across evaluated interviews</small></article><article className="stat"><span>Latest feedback</span><strong className="stat-word">{dashboard?.completed ? 'Available' : 'Not started'}</strong><small>Your report appears after evaluation</small></article></section></> : <section className="section-heading"><div><span className="eyebrow">PILOT WORKSPACE</span><h2>{user.role === 'superadmin' ? 'Manage college workspaces' : 'Manage your students'}</h2></div></section>}</>}
       {tab === 'start-interview' && <section className="panel"><span className="eyebrow">PERSONALISED AI INTERVIEW</span><h2>Prepare your interview</h2><p className="muted">Add your resume and a job description to help VYONA tailor the interview to your experience and target role.</p><form className="stack" onSubmit={startInterview}><label>Interview type<select value={interviewType} onChange={e => setInterviewType(e.target.value as 'technical' | 'hr')}><option value="technical">Technical interview</option><option value="hr">HR interview</option></select></label><Field label="Target role" value={roleTitle} onChange={setRoleTitle} required /><label>Resume text<textarea rows={6} value={resumeText} onChange={e => setResumeText(e.target.value)} placeholder="Paste your resume text here (skills, projects, education and experience)…" /></label><label>Job description (optional)<textarea rows={5} value={jobDescription} onChange={e => setJobDescription(e.target.value)} placeholder="Paste the job description to generate blended resume + JD questions…" /></label><button className="primary" disabled={busy}>{busy ? 'Preparing your interviewer…' : 'Start AI voice interview ↗'}</button></form><p className="muted tiny">For this pilot build, paste extracted resume text. PDF/DOCX upload and parsing will be added in the next implementation phase.</p></section>}
       {tab === 'live-interview' && interview && <section className="interview-layout"><div className="interviewer-card"><div className="ai-orb">V<span>AI</span></div><h2>AI Interviewer</h2><p>Listening and responding in real time</p><div className="voice-bars"><i/><i/><i/><i/><i/><i/><i/></div><span className="live-label">● LIVE INTERVIEW</span></div><div className="panel transcript-panel"><div className="panel-title"><div><span className="eyebrow">INTERVIEW TRANSCRIPT</span><h2>{roleTitle}</h2></div><button className="secondary" onClick={downloadTranscript}>Download transcript</button></div><div className="question-bubble"><b>VYONA AI</b><p>{interview.question}</p></div><label>Your answer<textarea rows={5} value={answer} onChange={e => setAnswer(e.target.value)} placeholder="Speak your answer using the microphone, or type here…" /></label><div className="answer-actions"><button className={recording ? 'danger' : 'secondary'} onClick={recording ? stopRecording : beginRecording} disabled={busy}>{recording ? '■ Stop recording' : '🎙 Record answer'}</button><button className="primary" onClick={submitAnswer} disabled={busy || !answer.trim()}>{busy ? 'Processing…' : 'Submit answer →'}</button></div><div className="interview-footer"><span className="muted tiny">Your answers are transcribed and evaluated for content, relevance and clarity.</span><button className="text-button" onClick={finishInterview} disabled={busy}>Finish & generate report</button></div></div></section>}
-      {tab === 'reports' && <section className="panel"><span className="eyebrow">PLACEMENT ASSESSMENT REPORT</span><h2>AI-powered performance insights</h2>{report ? <><div className="score-panel"><strong>{report.overallScore}</strong><span>/ 100 overall score</span></div><p>{report.summary}</p><div className="report-columns"><div><h3>Strengths</h3>{report.strengths.map(x => <p className="positive" key={x}>✓ {x}</p>)}</div><div><h3>Improvement areas</h3>{report.improvements.map(x => <p className="improve" key={x}>↗ {x}</p>)}</div></div><h3>Performance rubric</h3>{Object.entries(report.rubric).map(([key,value]) => <div className="rubric" key={key}><span>{key.replace(/([A-Z])/g, ' $1')}</span><b>{value}%</b><div><i style={{width:`${value}%`}}/></div></div>)}</> : <p className="muted">Complete an AI interview to generate your personalised performance report.</p>}</section>}
+      {tab === 'reports' && <section className="panel"><span className="eyebrow">PLACEMENT ASSESSMENT REPORT</span><h2>AI-powered performance insights</h2>{report ? <><button className="secondary" onClick={downloadTranscript}>Download interview transcript</button><div className="score-panel"><strong>{report.overallScore}</strong><span>/ 100 overall score</span></div><p>{report.summary}</p><div className="report-columns"><div><h3>Strengths</h3>{report.strengths.map(x => <p className="positive" key={x}>✓ {x}</p>)}</div><div><h3>Improvement areas</h3>{report.improvements.map(x => <p className="improve" key={x}>↗ {x}</p>)}</div></div><h3>Performance rubric</h3>{Object.entries(report.rubric).map(([key,value]) => <div className="rubric" key={key}><span>{key.replace(/([A-Z])/g, ' $1')}</span><b>{value}%</b><div><i style={{width:`${value}%`}}/></div></div>)}</> : <p className="muted">Complete an AI interview to generate your personalised performance report.</p>}</section>}
       {tab === 'colleges' && user.role === 'superadmin' && <><section className="panel"><h2>Create a college workspace</h2><form className="form-grid" onSubmit={createCollege}><Field label="College name" value={collegeName} onChange={setCollegeName} required/><Field label="Admin full name" value={adminName} onChange={setAdminName} required/><Field label="Admin email" type="email" value={adminEmail} onChange={setAdminEmail} required/><button className="primary" disabled={busy}>Create college + admin</button></form><p className="muted tiny">A temporary password is generated for the first college administrator. Securely share it with them.</p></section><section className="panel"><h2>College workspaces</h2>{colleges.map(c => <div className="list-row" key={c.id}><div><b>{c.name}</b><small>{c.slug} · {c.student_count} students</small></div><span className={c.is_active ? 'status-on' : 'status-off'}>{c.is_active ? 'Active' : 'Inactive'}</span></div>)}</section></>}
       {tab === 'students' && user.role === 'college_admin' && <><section className="panel"><h2>Add a student</h2><form className="form-grid" onSubmit={createStudent}><Field label="Full name" value={studentName} onChange={setStudentName} required/><Field label="Email" type="email" value={studentEmail} onChange={setStudentEmail} required/><Field label="Roll number" value={rollNumber} onChange={setRollNumber} required/><Field label="Department" value={department} onChange={setDepartment}/><button className="primary" disabled={busy}>Create student</button></form></section><section className="panel"><h2>Students · {students.length}</h2>{students.map(s => <div className="list-row" key={s.id}><div><b>{s.full_name}</b><small>{s.roll_number} · {s.department ?? 'Department not set'} · {s.email}</small></div><span className="status-on">{s.interview_count} interviews</span></div>)}</section></>}
       <footer>VYONA AI <span>•</span> Practical interview preparation</footer>
