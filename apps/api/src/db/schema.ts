@@ -51,7 +51,8 @@ export const interviews = pgTable('interviews', {
   type: interviewType('type').notNull(),
   status: interviewStatus('status').notNull().default('in_progress'),
   roleTitle: varchar('role_title', { length: 160 }),
-  resumeContext: text('resume_context'),\n  jobDescription: text('job_description'),
+  resumeContext: text('resume_context'),
+  jobDescription: text('job_description'),
   startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
   submittedAt: timestamp('submitted_at', { withTimezone: true }),
 }, (table) => ({ studentIdx: index('interviews_student_idx').on(table.studentId), statusIdx: index('interviews_status_idx').on(table.status) }));
