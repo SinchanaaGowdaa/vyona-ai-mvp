@@ -15,7 +15,7 @@ This MVP is intentionally limited to the pilot workflow. Advanced proctoring, me
 
 - Web: React, Vite, TypeScript
 - API: Node.js, Express, TypeScript
-- Database: PostgreSQL with Drizzle ORM
+- Database: Neon PostgreSQL with Drizzle ORM
 
 ## Repository structure
 
@@ -27,16 +27,15 @@ packages/
   shared/    Shared types and validation
 ```
 
-## Local setup
+## Setup (Neon PostgreSQL — no local PostgreSQL installation required)
 
-Prerequisites: Node.js 20+, npm 10+, and PostgreSQL 15+.
+1. Create a project in the Neon Console: https://console.neon.tech/ . Choose a region close to your users.
+2. In the project dashboard, choose **Connect** and copy the PostgreSQL connection string. Use the pooled connection string for the app and retain `sslmode=require`.
+3. Create `apps/api/.env` (not the repository root) and set `DATABASE_URL` to the full Neon connection string. Also set a long random `SESSION_SECRET`. Never commit this file.
+4. From the repository root, run `npm install` and then `npm run db:migrate`.
+5. Start the web and API apps with `npm run dev`.
 
-1. Copy `.env.example` to `apps/api/.env` and configure the database and secrets.
-2. Install dependencies with `npm install`.
-3. Run database migrations with `npm run db:migrate`.
-4. Start the web and API apps with `npm run dev`.
-
-See each app's README as implementation is added. Never commit real API keys, passwords, or production secrets.
+Neon connection strings usually select the default database `neondb`; use the database name shown in the copied connection string. Do not replace it with `vyona_ai` unless you explicitly created that database in Neon. The same `DATABASE_URL` is used by Drizzle migrations and the API.
 
 ## Pilot safety
 
